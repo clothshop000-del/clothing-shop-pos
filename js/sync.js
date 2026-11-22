@@ -15,7 +15,7 @@
   const SB = { c, ready: false }; window.SB = SB;
   const iso = x => new Date(x || Date.now()).toISOString(), ms = x => (x ? +new Date(x) : 0);
   const sig = r => JSON.stringify(r);
-  let cache = {}, timer = 0, busy = false, dirty = false, again = false, moff = [], rtOn = false;
+  let lastFlush = 0, cache = {}, timer = 0, busy = false, dirty = false, again = false, moff = [], rtOn = false;
 
   // small status badge (bottom-left)
   const badge = document.createElement("div");
@@ -34,7 +34,7 @@
     credit_notes: { k: "code", rows: () => (S.cnotes || []).map(n => ({ code: n.code, amt: n.amt, ph: n.ph || null, name: n.name || null, t: iso(n.t), used: !!n.used, bill: n.bill || null })) },
     customers: { k: "phone", rows: () => (S.cust || []).map(r => ({ phone: r.p, name: r.n || null, kind: r.k || "W" })) },
     qr_registrations: { k: "phone", rows: () => (S.regs || []).map(r => ({ phone: r.p, name: r.n || null, t: iso(r.t) })) },
-    qr_orders: { k: "id", rows: () => S.orders.filter(o => o.id).map(o => ({ id: o.id, name: o.name || null, phone: o.phone || null, lines: o.lines, t: iso(o.t), done: !!o.done })) },
+    qr_orders: { k: "id", rows: () => S.orders.filter(o => o.id).map(o => ({ id: o.id, name: o.name || null, phone: o.phone || null, lines: o.lines, t: iso(o.t), done: !!o.done, status: o.status || (o.done ? "completed" : "pending"), pay_method: o.pay_method || null, address: o.address || null, total: o.total || 0, sale_id: o.sale_id || null, done_t: o.done_t ? iso(o.done_t) : null })) },
     offers: { k: "id", del: 1, rows: () => (S.offers || []).map(o => ({ id: o.id, title: o.title || "", msg: o.msg || "", img: o.img || null, sel: osel(o) })) },
     offer_notes: { k: "phone,offer_id", id: r => r.phone + "|" + r.offer_id, rows: () => (S.notes || []).map(n => ({ phone: n.p, offer_id: n.o, t: iso(n.t) })) },
     label_jobs: { k: "sku", del: 1, rows: () => Object.entries(ls).filter(([k]) => FV(k)).map(([k, n]) => ({ sku: k, copies: Math.max(1, +n || 1) })) },
@@ -63,7 +63,7 @@
   async function flush() {
     if (busy) { timer = setTimeout(flush, 800); return; }
     busy = true; dirty = false; st("Saving…");
-    try { for (const t of ORDER) await sync(t); st("✓ Saved " + new Date().toLocaleTimeString()); }
+    try { for (const t of ORDER) await sync(t); lastFlush = Date.now(); st("✓ Saved " + new Date().toLocaleTimeString()); }
     catch (e) { console.error(e); dirty = true; st("⚠ Not saved: " + (e.message || e)); timer = setTimeout(flush, 6000); }
     busy = false;
     if (again && !dirty) { again = false; pullQ(); }
@@ -83,7 +83,7 @@
     }
   };
   function mapQ(qo, rg, on) {
-    S.orders = qo.map(o => ({ id: o.id, name: o.name || "", phone: o.phone || "", lines: o.lines, t: ms(o.t), done: o.done ? 1 : undefined })).sort((a, b) => a.t - b.t);
+    S.orders = qo.map(o => ({ id: o.id, name: o.name || "", phone: o.phone || "", lines: o.lines, t: ms(o.t), done: o.done ? 1 : undefined, status: o.status || "pending", pay_method: o.pay_method || "", address: o.address || "", total: +o.total || 0, sale_id: o.sale_id || undefined, done_t: o.done_t ? ms(o.done_t) : undefined })).sort((a, b) => a.t - b.t);
     S.regs = rg.map(r => ({ n: r.name || "", p: r.phone, t: ms(r.t) }));
     S.notes = on.map(r => ({ p: r.phone, o: +r.offer_id, t: ms(r.t) }));
   }
@@ -108,23 +108,25 @@
     ORDER.forEach(snapT);
     if (!st0.length) delete cache.settings;       // first run: write defaults
   }
+  // refresh from the database (other devices' bills, orders, stock ...) without losing what the user is typing
+  const sigAll = () => ORDER.map(t => JSON.stringify(cache[t] || {})).join("|");
+  const typing = () => { const a = document.activeElement; return a && /INPUT|SELECT|TEXTAREA/.test(a.tagName) && a.id !== "sc"; };
   async function pullQ() {
-    if (dirty || busy) { again = true; return; }
+    if (dirty || busy || !SB.ready) { again = true; return; }
+    if (typing()) { setTimeout(pullQ, 4000); return; }
     try {
-      const [qo, rg, on] = await Promise.all(["qr_orders", "qr_registrations", "offer_notes"].map(all));
-      const n0 = S.orders.length;
-      mapQ(qo, rg, on); ["qr_orders", "qr_registrations", "offer_notes"].forEach(snapT);
-      if (S.orders.length > n0) T("🔔 New QR order");
-      if (tab == "qr" || tab == "cu") R();
+      const pend = () => S.orders.filter(o => (o.status || "pending") == "pending" && !o.done).length, b = sigAll(), n0 = pend();
+      await pull();
+      if (sigAll() !== b) { if (pend() > n0) T("🔔 New QR order"); R(); }
     } catch (e) { console.error(e); }
   }
   function subscribe() {
     if (rtOn) return; rtOn = true; let tm;
-    const f = () => { clearTimeout(tm); tm = setTimeout(pullQ, 700); };
-    c.channel("pos-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "qr_orders" }, f)
-      .on("postgres_changes", { event: "*", schema: "public", table: "qr_registrations" }, f)
-      .subscribe();
+    const f = () => { if (Date.now() - lastFlush < 3000) return; clearTimeout(tm); tm = setTimeout(pullQ, 1200); };
+    let ch = c.channel("pos-live");
+    ORDER.forEach(t => { ch = ch.on("postgres_changes", { event: "*", schema: "public", table: t }, f); });
+    ch.subscribe();
+    setInterval(() => { if (SB.ready && !dirty && !busy) pullQ(); }, 30000);
   }
 
   // ---- screens ---------------------------------------------------------------------
@@ -142,7 +144,7 @@
     box("Loading…");
     try { await pull(); }
     catch (e) { box(`<h3 class="wn">Cannot load data</h3><p>${esc(e.message || e)}</p><p><small>Did you run supabase/schema.sql ?</small></p><button onclick="SB.boot()">Retry</button> <button onclick="SB.out()">Sign out</button>`); return; }
-    SB.ready = true; LU(); R(); subscribe();
+    SB.ready = true; try { const [n, p] = (localStorage.getItem("posuser") || "").split("\u0001"); const u = S.users.find(x => x.n == n && String(x.pin) == p); if (u) U = u; } catch (e) {} LU(); R(); subscribe();
     if (!cache.settings) SB.push();
   }
 
@@ -160,27 +162,73 @@
     S.items = Object.values(M).sort((x, y) => x.no - y.no);
     const s = b.data || {};
     S.shop = { ...S.shop, name: s.name || "Shop", logo: s.logo || "", offer: s.offer || "", cur: s.cur || "Rs." };
-    await loadOffers(); R();
+    await loadOffers(); await loadOrders(false); R();
+    setInterval(async () => { try { await loadOrders(true); const a = document.activeElement; if (!(a && /INPUT/.test(a.tagName))) R(); } catch (e) {} }, 15000);
   }
   window.mreg = function () {
     let p = ""; try { p = localStorage.getItem("regp") || ""; } catch (e) {}
     if (!p) return `<div class="cd" style="background:var(--bg)"><b>Register to get offers</b><div class="fm"><input id="rn" placeholder="Name"><input id="rp" placeholder="Phone"><button class="pri" onclick="RG()">Register</button></div></div>`;
     return moff.map(o => `<div class="cd" style="border-color:var(--ac)">${o.img ? `<img src="${o.img}" alt="" style="width:100%;border-radius:10px;margin-bottom:8px">` : ""}<b>🎁 ${esc(o.title)}</b><p>${esc(o.msg)}</p>${(o.items || []).map(i => `<div class="row"><span>${esc(i.name)} <small>${esc(i.cat || "Other")}</small></span><span><s>${m(i.price)}</s> <b>${m(i.offer)}</b></span></div>`).join("")}</div>`).join("");
   };
+  // ---- customer app: order, pay choice, status + notifications ---------------------
+  let mcat = "", mq = "", mpay = "cod", mqty = {}, mnm = "", mph = "", mad = "", orders = [], ost = {};
+  try { ost = JSON.parse(localStorage.getItem("ost") || "{}"); } catch (e) {}
+  const STX = { pending: "⏳ Waiting for confirmation", confirmed: "👨‍🍳 Confirmed · preparing", ready: "🛍 Ready!", completed: "✔ Completed", rejected: "❌ Rejected" };
+  const phone0 = () => { try { return localStorage.getItem("regp") || localStorage.getItem("ordph") || ""; } catch (e) { return ""; } };
+  async function loadOrders(notify) {
+    const p = phone0(); if (!p) return;
+    const { data } = await c.rpc("my_orders", { p_phone: p });
+    orders = data || [];
+    orders.forEach(o => {
+      if (notify && ost[o.id] && ost[o.id] !== o.status) {
+        const msg = { confirmed: "✅ Order #" + o.id + " confirmed — we are preparing it", ready: "🛍 Order #" + o.id + " is READY!", rejected: "❌ Order #" + o.id + " was rejected", completed: "✔ Order #" + o.id + " completed" }[o.status];
+        if (msg) { T(msg); try { if (Notification.permission === "granted") new Notification(S.shop.name, { body: msg }); } catch (e) {} }
+      }
+      ost[o.id] = o.status;
+    });
+    try { localStorage.setItem("ost", JSON.stringify(ost)); } catch (e) {}
+  }
   window.RG = async function () {
     const p = np($("rp").value); if (!p) { T("Phone required"); return; }
     const { error } = await c.rpc("register_customer", { p_name: $("rn").value.trim(), p_phone: p });
     if (error) { T("Could not register"); return; }
     try { localStorage.setItem("regp", p); } catch (e) {}
-    await loadOffers(); R();
+    mph = p; mnm = $("rn").value.trim();
+    await loadOffers(); await loadOrders(false); R();
+  };
+  const mrows = () => {
+    const k = mq.toLowerCase();
+    return VS().filter(x => (!mcat || (x.it.cat || "Other") == mcat) && (!k || (x.it.name + " " + vl(x.v) + " #" + x.it.no).toLowerCase().includes(k))).map(x => {
+      const im = (x.it.ci && x.it.ci[x.v.color]) || x.it.img, off = x.v.qty < 1;
+      return `<div class="row" style="${off ? "opacity:.55" : ""}"><span>${im ? `<img src="${im}" alt="" style="height:44px;width:44px;object-fit:cover;border-radius:8px;vertical-align:middle;margin-right:8px">` : ""}${esc(x.it.name)} <small>${esc(vl(x.v))}</small><br><small style="color:var(--mu)">${esc(x.it.cat || "")} · ${m(x.it.price)} · ${off ? "Out of stock" : x.v.qty + " in stock"}</small></span><input class="mq" type="text" inputmode="numeric" value="${mqty[x.v.sku] || 0}" style="width:60px" ${off ? "disabled" : ""} oninput="MQ('${x.v.sku}',this.value)"></div>`;
+    }).join("") || "<p>—</p>";
+  };
+  window.MQ = (k, v) => { const f = FV(k); mqty[k] = Math.min(Math.max(0, parseInt(v) || 0), f ? f.v.qty : 0); };
+  window.MS = v => { mq = v; $("ml").innerHTML = mrows(); };
+  window.menu = function () {
+    const sh = S.shop, cats = [...new Set(S.items.map(i => i.cat || "Other"))], PM = { cod: "💵 Cash on delivery", bank: "🏦 Bank transfer · delivery", shop: "🏬 I will visit the shop" };
+    return `<main><div class="cd"><div style="text-align:center">${sh.logo ? `<img src="${sh.logo}" alt="" style="max-height:90px;border-radius:10px"><br>` : ""}<h2>${esc(sh.name)}</h2></div>${sh.offer ? `<p><b>${esc(sh.offer)}</b></p>` : ""}${mreg()}
+${orders.length ? `<div class="cd"><b>My orders</b>${orders.slice(0, 8).map(o => `<div class="row"><span>#${o.id} · ${new Date(o.t).toLocaleDateString()} · ${m(o.total)}</span><b>${STX[o.status] || o.status}</b></div>`).join("")}${(window.Notification && Notification.permission === "default") ? `<button onclick="Notification.requestPermission().then(R)">🔔 Turn on notifications</button>` : ""}</div>` : ""}
+<input placeholder="🔍 Search items" value="${esc(mq)}" oninput="MS(this.value)"><div class="pills">${["", ...cats].map(c => `<button class="ch ${mcat == c ? "on" : ""}" onclick="mcat=${J(c)};R()">${c ? esc(c) : "All"}</button>`).join("")}</div>
+<div id="ml">${mrows()}</div>
+<div class="fm"><input placeholder="Name" value="${esc(mnm)}" oninput="mnm=this.value"><input placeholder="Phone" value="${esc(mph)}" oninput="mph=this.value"></div>
+<div class="pills">${Object.keys(PM).map(k => `<button class="ch ${mpay == k ? "on" : ""}" onclick="mpay='${k}';R()">${PM[k]}</button>`).join("")}</div>
+${mpay != "shop" ? `<input placeholder="Delivery address" value="${esc(mad)}" oninput="mad=this.value"><br><br>` : ""}<button class="pri" onclick="MO()">Place order</button></div></main>`;
   };
   window.MO = async function () {
-    const lines = [...document.querySelectorAll(".mq")].filter(e => +e.value > 0).map(e => { const f = FV(e.dataset.k); return { sku: e.dataset.k, n: f.it.name + " " + vl(f.v), qty: +e.value }; });
-    if (!lines.length) return;
-    const { error } = await c.rpc("place_order", { p_name: $("mn").value.trim(), p_phone: np($("mp").value), p_lines: lines });
-    if (error) { T("Could not send the order"); return; }
-    T(t("thanks")); document.querySelectorAll(".mq").forEach(e => { e.value = 0; });
+    const lines = Object.entries(mqty).filter(([k, q]) => q > 0 && FV(k)).map(([k, q]) => { const f = FV(k); return { sku: k, n: f.it.name + " " + vl(f.v), qty: Math.min(q, f.v.qty) }; });
+    if (!lines.length) { T("Choose at least one item"); return; }
+    const ph = np(mph); if (!ph) { T("Phone required"); return; }
+    if (mpay != "shop" && !mad.trim()) { T("Delivery address required"); return; }
+    try { if (window.Notification && Notification.permission === "default") Notification.requestPermission(); } catch (e) {}
+    const { data, error } = await c.rpc("place_order", { p_name: mnm.trim(), p_phone: ph, p_lines: lines, p_pay: mpay, p_addr: mad.trim() });
+    if (error) { T("Could not send the order: " + (error.message || "")); return; }
+    mqty = {}; try { localStorage.setItem("ordph", ph); } catch (e) {}
+    T("✅ Order sent! Total " + m(data.total));
+    await loadOrders(false); R();
   };
+  const LI0 = window.LI;
+  window.LI = function () { LI0(); if (U) try { localStorage.setItem("posuser", U.n + "\u0001" + U.pin); } catch (e) {} };
 
   SB.boot = async () => {
     try { Object.assign(S, JSON.parse(localStorage.getItem("pospref") || "{}")); } catch (e) {}

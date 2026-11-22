@@ -11,6 +11,7 @@ clothing-shop-pos/
 ├─ js/sync.js            ← Supabase එක්ක සම්බන්ධය (login, දත්ත load/save, live QR orders, QR menu)
 ├─ config.js             ← ඔයාගේ Supabase URL + anon key මෙතන දාන්න
 ├─ supabase/schema.sql   ← Database එක හදන SQL (tables, security, QR functions, realtime)
+├─ supabase/update-1.sql ← schema.sql ට පස්සේ run කරන SQL (QR order workflow, payments, realtime)
 ├─ server.js             ← VS Code / computer එකේ run කරන පොඩි server එක (package ඕන නැහැ)
 ├─ package.json          ← `npm start` සඳහා
 └─ .vscode/              ← VS Code tasks + extension නිර්දේශ
@@ -68,6 +69,8 @@ Server එකක් ඕන නැහැ. Hosting = **Cloudflare Pages** (free), 
 1. වම් menu එකේ **SQL Editor** → **New query**.
 2. `supabase/schema.sql` file එක open කරලා **ඔක්කොම copy** කරලා paste කරන්න.
 3. **Run** ඔබන්න. "Success. No rows returned" කියලා ආවොත් හරි.
+4. **ඊට පස්සේ තවත් එක්:** ආයෙත් **New query** → `supabase/update-1.sql` ඔක්කොම copy කරලා paste කරලා **Run**. (මේකෙන් QR order workflow, payment choices, හැම device එකම ඉබේම refresh වෙන realtime එක ක්‍රියාත්මක වෙනවා.)
+   > කලින් `schema.sql` run කරලා තියෙනවා නම් **update-1.sql විතරක්** run කරන්න ඇති. ඔක්කොම අලුතින් නම් **schema.sql ඊට පස්සේ update-1.sql** (අනුපිළිවෙලින්).
 
 මේකෙන් හැදෙන tables:
 
@@ -169,3 +172,19 @@ GitHub එකේ file එක edit කරලා **Commit** කළාම Cloudflar
 | "⚠ Not saved …" (වම් පහළ) | Internet / login එක බලන්න, Sign out → ආයෙත් sign in |
 | QR menu එකේ items නැහැ | Item එක **Hide in POS** tick කරලාද, stock 0 ද බලන්න |
 | Sign in වෙන්න බැහැ | Authentication → Users එකේ user ඉන්නවාද, **Auto Confirm** කළාද බලන්න |
+
+
+---
+
+## 🆕 Update 1 හි අලුත් දේවල්
+
+- **Bill එකේ discount / qty / price** — ඇතුළත් කරන ගමන්ම ගණන් වෙනස් වෙනවා (වෙන තැනක් click කරන්න ඕන නැහැ).
+- **Refresh කළත් logout වෙන්නේ නැහැ** — Refresh වුණාම නැවත PIN ඉල්ලන්නේ නැහැ. **Logout** (⎋) ඔබනකල් login එක ඉන්නවා.
+- **වෙනත් device වල වෙනස්කම් ඉබේම පෙනෙනවා** — bills, orders, stock, QR orders ආදිය සමාන්තරව refresh වෙනවා (realtime + තත්පර 30කට වතාවක් check කිරීම). ඔයා type කරමින් ඉන්න වෙලාවේ page එක refresh කරන්නේ නැහැ.
+- **QR orders workflow:** `New → Confirm / Reject → Preparing → Order ready → Complete order`.
+  - **Confirm** කළාම ඒ order එකෙන් **bill එකක් හැදිලා Orders tab එකේ save වෙනවා**, stock අඩු වෙනවා, bill එක print / WhatsApp කරන්න පුළුවන්.
+  - **Complete** / **Rejected** orders පැය 24ක් වෙනම කොටසක පෙනෙනවා, ඊට පස්සේ ලැයිස්තුවෙන් ඉබේම අයින් වෙනවා.
+- **Customer app (QR):** items search, category pills, stock පෙන්වීම (stock 0 නම් අඳුරුයි, තෝරන්න බැහැ), **payment choice** (Cash on delivery / Bank transfer · delivery / Shop visit), delivery address, **"My orders"** status, සහ status වෙනස් වුණාම notification (browser එක open ඉන්න අතරතුර; permission දුන්නොත් browser notification එකකුත්).
+- Order මිල **server එකෙන්ම** ගණන් කරනවා (offer මිල සහ stock පරීක්ෂා කරලා), ඒ නිසා customer ට මිල වෙනස් කරන්න බැහැ.
+
+> **තාම නැති දේවල් (Update 2):** device approval (admin approve කරන ලොගින්), customer app එකේ offers slider / dark mode / භාෂා / profile history / app install (PWA) / background push notification.
