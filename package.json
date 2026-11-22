@@ -1,0 +1,7 @@
+{
+  "name": "clothing-shop-pos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Clothing shop POS (Supabase)",
+  "scripts": { "start": "node server.js" }
+}
