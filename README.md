@@ -46,7 +46,7 @@ Server එකක් ඕන නැහැ. Hosting = **Cloudflare Pages** (free), 
    npm start
    ```
    (නැත්නම් `node server.js`, හෝ `Ctrl+Shift+B` ඔබලා "Run POS" task එක.)
-6. Browser එකේ **http://localhost:3000** open කරන්න. Sign in → PIN screen එක එනවා.
+6. Browser එකේ **http://localhost:3000** open කරන්න. **Request access** (පළමු කෙනා Admin වෙනවා) → ඇතුළට යනවා.
 7. නවත්වන්න: terminal එකේ `Ctrl+C`.
 
 **විදිය B — Live Server extension**
@@ -70,13 +70,15 @@ Server එකක් ඕන නැහැ. Hosting = **Cloudflare Pages** (free), 
 2. `supabase/schema.sql` file එක open කරලා **ඔක්කොම copy** කරලා paste කරන්න.
 3. **Run** ඔබන්න. "Success. No rows returned" කියලා ආවොත් හරි.
 4. **ඊට පස්සේ තවත් එක්:** ආයෙත් **New query** → `supabase/update-1.sql` ඔක්කොම copy කරලා paste කරලා **Run**. (මේකෙන් QR order workflow, payment choices, හැම device එකම ඉබේම refresh වෙන realtime එක ක්‍රියාත්මක වෙනවා.)
-   > කලින් `schema.sql` run කරලා තියෙනවා නම් **update-1.sql විතරක්** run කරන්න ඇති. ඔක්කොම අලුතින් නම් **schema.sql ඊට පස්සේ update-1.sql** (අනුපිළිවෙලින්).
+5. **තවත් එක්:** ආයෙත් **New query** → `supabase/update-2.sql` ඔක්කොම paste කරලා **Run**. (මේකෙන් **staff / device approval** සහ **database ආරක්ෂාව** ක්‍රියාත්මක වෙනවා.)
+   > අනුපිළිවෙල: **schema.sql → update-1.sql → update-2.sql**. කලින් ඒවා run කරලා තියෙනවා නම් අලුත් එක / ඒවා විතරක් run කරන්න.
 
 මේකෙන් හැදෙන tables:
 
 | Table | මොකටද |
 |---|---|
-| `settings` | shop නම, logo, tax, users + PIN, categories, brands |
+| `settings` | shop නම, logo, tax, categories, brands |
+| `staff` | staff / devices ගේ approval, role, status |
 | `items`, `variants` | inventory (item, size, colour, SKU, barcode, stock, photos, hidden) |
 | `label_jobs` | barcode labels print කරන්න තෝරපු ඒවා |
 | `sales` | bills (re-edit bills ඇතුළුව) |
@@ -85,17 +87,21 @@ Server එකක් ඕන නැහැ. Hosting = **Cloudflare Pages** (free), 
 | `qr_orders` | QR menu එකෙන් එන orders |
 | `offers`, `offer_notes` | offers සහ customers ට යවපු notifications |
 
-## පියවර 3 — Shop එකේ login එක හදන්න
+## පියවර 3 — Login settings (Supabase dashboard එකේ එක් වතාවක් විතරයි)
 
-1. **Authentication → Users → Add user → Create new user**.
-2. Email + password දෙන්න, **Auto Confirm User** tick කරන්න → **Create user**.
+Staff ලා ගේ accounts **app එකෙන්ම** හැදෙන නිසා Supabase dashboard එකේ user හදන්න ඕන නැහැ.
 
-## පියවර 4 — ⚠️ සුරක්ෂිතතාව (අනිවාර්යයි)
+1. **Authentication → Sign In / Providers** (හෝ **Providers → Email**).
+2. **"Allow new users to sign up"** = **ON**.
+3. **"Confirm email"** = **OFF** (නැත්නම් හැම අලුත් device එකකටම email එකක් confirm කරන්න වෙනවා).
+4. Save.
 
-**Authentication → Sign In / Providers → "Allow new users to sign up" → OFF** කරලා Save කරන්න.
+## පියවර 4 — 🔐 ආරක්ෂාව (මෙහෙමයි වැඩ කරන්නේ)
 
-> මේක OFF නොකළොත් ඕනම කෙනෙකුට account එකක් හදාගෙන ඔයාගේ දත්ත බලන්න පුළුවන්.
-> Login එක ඔයා හදපු user ලා ට විතරයි.
+- Sign-ups ON වුණාට, **අලුත් account එකකට කිසිම දත්තයක් පෙනෙන්නේ නැහැ** — Admin approve කරනකල් (`update-2.sql` එකේ database rules නිසා).
+- **පළමුවෙන්ම request කරන කෙනා Admin** වෙනවා. ඒ නිසා **site එක deploy කරපු ගමන්ම, වෙන කිසිවෙක් දැනගන්න කලින්, ඔයා ඉස්සෙල්ලා account එක හදාගන්න** (පියවර 9).
+- ඊට පස්සේ එන හැම device එකක්ම / කෙනෙක්ම **pending**. ඔයා (Admin) **Settings → 👥 Staff & devices** වලින් **Approve**, **Role** (Admin / Cashier / Stock Keeper) තෝරන්න, **Remove**, **🗑 Delete** කරන්න පුළුවන්.
+- Remove කළාම ඒ device එක තත්පර 20ක් ඇතුළත ඉබේම ඇතුළට යන්න බැරි වෙනවා.
 
 ## පියවර 5 — Keys `config.js` එකට දාන්න
 
@@ -137,10 +143,18 @@ window.APP_CONFIG = {
 
 ## පියවර 9 — පළමු වතාවට පාවිච්චි කරන්න
 
-1. Site එක open කරලා පියවර 3 හි email + password එකෙන් **Sign in**.
-2. ඊළඟට PIN screen එක: **Admin = 1111**, Cashier = 2222, Stock Keeper = 3333.
-3. **Settings → Users & roles** වලින් **PIN වෙනස් කරන්න**. Settings එකේම shop නම, logo, tax දාන්න.
-4. Inventory එකට categories / brands / items දාන්න.
+**Admin (ඔයා) — පළමුවෙන්ම:**
+1. Site එක open කරන්න → **"New device? Request access"** ඔබන්න.
+2. ඔයාගේ **නම, email, password (අකුරු 6+)** දාලා **Request access**. ඔයා තමයි පළමු කෙනා නිසා **ඉබේම Admin + approved**, ඇතුළට යනවා.
+3. **Settings** → shop නම, logo, tax දාන්න. **Inventory** එකට categories / brands / items දාන්න.
+
+**අනිත් අය (cashier, stock keeper):**
+1. ඒ device එකෙන් site එක open කරලා **Request access** → නම, email, password.
+2. "⏳ Waiting for admin approval" කියලා පෙනෙනවා.
+3. ඔයා (Admin) **Settings → Staff & devices** එකේ ඒ අයව **Approve** කරලා **role** එක තෝරන්න (🔔 පණිවිඩයකුත් එනවා).
+4. ඒ device එක ඉබේම ඇතුළට යනවා.
+
+පසුව: **Sign in** (email + password). Refresh කළත් sign in එක මතකයි, **⎋ Sign out** ඔබනකල් ඉන්නවා.
 
 ## පියවර 10 — QR ordering
 
@@ -157,7 +171,7 @@ GitHub එකේ file එක edit කරලා **Commit** කළාම Cloudflar
 
 ## දැනගන්න ඕන දේවල්
 
-- **Roles (Admin / Cashier / Stock Keeper)** app එක ඇතුළේ පාලනය වෙන ඒවා. Database එකට ඇතුල් වෙන්නේ shop login (email+password) එකෙන්, ඒ නිසා ඒක **විශ්වාස කරන කෙනෙක්ට / device එකකට** විතරක් දෙන්න.
+- **Roles:** Admin = සියල්ල + Staff & devices. Cashier = POS, Orders, Refunds, Customers, Labels. Stock Keeper = Inventory, Labels. දත්ත database එකට ඇතුළු වෙන්න පුළුවන්කම (approve කළාද නැද්ද) **database එකෙන්ම** පාලනය වෙනවා; role අනුව tab මොනවාද කියන එක app එක ඇතුළේ පාලනය වෙනවා.
 - **Customers (QR)** ට කෙලින්ම tables වලට access නැහැ. ඔවුන්ට පෙනෙන්නේ stock තියෙන, හංගලා නැති items (ගත් මිල නැතුව) සහ ඒ ඒ phone එකට අදාල offers විතරයි. Order එවන / register වෙන functions තියෙනවා.
 - **Backups:** Supabase free plan එකේ automatic backups නැහැ. Table Editor එකෙන් CSV export කරන්න (නිතර), හෝ Pro plan එකක් ගන්න. Free project එක **දවස් 7ක් භාවිතයක් නැතිව ගියොත් pause වෙනවා** (Dashboard එකෙන් resume කරන්න පුළුවන්).
 - **Claude preview එකේ දැනට තියෙන දත්ත** මේකට ඉබේම එන්නේ නැහැ. අලුතින් items / settings ඇතුළත් කරන්න.
@@ -171,7 +185,9 @@ GitHub එකේ file එක edit කරලා **Commit** කළාම Cloudflar
 | "Cannot load data" | පියවර 2 (SQL) run කළාද බලන්න |
 | "⚠ Not saved …" (වම් පහළ) | Internet / login එක බලන්න, Sign out → ආයෙත් sign in |
 | QR menu එකේ items නැහැ | Item එක **Hide in POS** tick කරලාද, stock 0 ද බලන්න |
-| Sign in වෙන්න බැහැ | Authentication → Users එකේ user ඉන්නවාද, **Auto Confirm** කළාද බලන්න |
+| Sign in වෙන්න බැහැ | Request access කරලා Sign in වෙන්න. "Confirm email" OFF කළාද (පියවර 3) බලන්න |
+| "Cannot check access" | **update-2.sql** run කළාද බලන්න |
+| Admin කෙනෙක් නැති වුණා (අහම්බෙන් Remove) | Supabase **Table Editor → staff** එකේ ඒ row එකේ `status`=approved, `role`=A කරන්න |
 
 
 ---
@@ -179,7 +195,7 @@ GitHub එකේ file එක edit කරලා **Commit** කළාම Cloudflar
 ## 🆕 Update 1 හි අලුත් දේවල්
 
 - **Bill එකේ discount / qty / price** — ඇතුළත් කරන ගමන්ම ගණන් වෙනස් වෙනවා (වෙන තැනක් click කරන්න ඕන නැහැ).
-- **Refresh කළත් logout වෙන්නේ නැහැ** — Refresh වුණාම නැවත PIN ඉල්ලන්නේ නැහැ. **Logout** (⎋) ඔබනකල් login එක ඉන්නවා.
+- **Refresh කළත් sign in එක මතකයි** — **⎋ Sign out** ඔබනකල් ඉන්නවා.
 - **වෙනත් device වල වෙනස්කම් ඉබේම පෙනෙනවා** — bills, orders, stock, QR orders ආදිය සමාන්තරව refresh වෙනවා (realtime + තත්පර 30කට වතාවක් check කිරීම). ඔයා type කරමින් ඉන්න වෙලාවේ page එක refresh කරන්නේ නැහැ.
 - **QR orders workflow:** `New → Confirm / Reject → Preparing → Order ready → Complete order`.
   - **Confirm** කළාම ඒ order එකෙන් **bill එකක් හැදිලා Orders tab එකේ save වෙනවා**, stock අඩු වෙනවා, bill එක print / WhatsApp කරන්න පුළුවන්.
@@ -188,3 +204,13 @@ GitHub එකේ file එක edit කරලා **Commit** කළාම Cloudflar
 - Order මිල **server එකෙන්ම** ගණන් කරනවා (offer මිල සහ stock පරීක්ෂා කරලා), ඒ නිසා customer ට මිල වෙනස් කරන්න බැහැ.
 
 > **තාම නැති දේවල් (Update 2):** device approval (admin approve කරන ලොගින්), customer app එකේ offers slider / dark mode / භාෂා / profile history / app install (PWA) / background push notification.
+
+
+---
+
+## 🆕 Update 2 — Staff & device approval
+
+- Staff accounts **app එකෙන්ම** හැදෙනවා ("Request access"). Supabase dashboard එකට යන්න ඕන නැහැ.
+- **Admin approve කරනකල්** අලුත් device එකකට කිසිම දත්තයක් පෙනෙන්නේ නැහැ (database එකෙන්ම පාලනය).
+- Admin: **Settings → Staff & devices** → Approve / Role / Remove / Delete. Settings page එක Admin ට විතරයි.
+- PIN login අයින් කළා. දැන් අලුත් device එකකින් email + password, ඊට පස්සේ Admin approve.

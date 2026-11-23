@@ -127,25 +127,72 @@
     ORDER.forEach(t => { ch = ch.on("postgres_changes", { event: "*", schema: "public", table: t }, f); });
     ch.subscribe();
     setInterval(() => { if (SB.ready && !dirty && !busy) pullQ(); }, 30000);
+    setInterval(() => { if (SB.ready) { chk().catch(() => {}); stRefresh(); } }, 20000);
+    c.channel("staff-live").on("postgres_changes", { event: "*", schema: "public", table: "staff" }, () => { if (SB.ready) { chk().catch(() => {}); stRefresh(); } }).subscribe();
   }
 
   // ---- screens ---------------------------------------------------------------------
   const box = h => { $("app").innerHTML = `<div class="ov"><div class="md">${h}</div></div>`; };
+  const devName = () => { const u = navigator.userAgent, os = /Windows/.test(u) ? "Windows" : /Android/.test(u) ? "Android" : /iPhone|iPad/.test(u) ? "iPhone/iPad" : /Mac/.test(u) ? "Mac" : "Device", br = /Edg\//.test(u) ? "Edge" : /Chrome\//.test(u) ? "Chrome" : /Firefox\//.test(u) ? "Firefox" : /Safari\//.test(u) ? "Safari" : "Browser"; return br + " on " + os; };
+  let amode = "in", waitT = 0;
+  SB.mode = m => { amode = m; authUI(); };
   function authUI(msg) {
-    box(`<h3 style="text-align:center">🔐 Shop sign in</h3><input id="ae" type="email" placeholder="Email" autocomplete="username"><br><br><input id="ap2" type="password" placeholder="Password" autocomplete="current-password" onkeyup="if(event.key=='Enter')SB.signin()"><br><br><button class="pri" onclick="SB.signin()">Sign in</button><p class="wn">${esc(msg || "")}</p>`);
+    const reg = amode == "req";
+    box(`<h3 style="text-align:center">🔐 ${reg ? "Request access" : "Shop sign in"}</h3>${reg ? `<input id="an2" placeholder="Your name"><br><br>` : ""}<input id="ae" type="email" placeholder="Email" autocomplete="username"><br><br><input id="ap2" type="password" placeholder="Password (min 6 characters)" autocomplete="${reg ? "new-password" : "current-password"}" onkeyup="if(event.key=='Enter')SB.signin()"><br><br><button class="pri" style="width:100%" onclick="SB.signin()">${reg ? "Request access" : "Sign in"}</button><p class="wn">${esc(msg || "")}</p><p style="text-align:center"><button onclick="SB.mode('${reg ? "in" : "req"}')">${reg ? "I already have an account" : "New device? Request access"}</button></p>`);
   }
   SB.signin = async () => {
-    const { error } = await c.auth.signInWithPassword({ email: $("ae").value.trim(), password: $("ap2").value });
-    if (error) { authUI(error.message); return; }
-    start();
+    const email = $("ae").value.trim(), password = $("ap2").value;
+    if (amode == "req") {
+      const name = $("an2").value.trim(); if (!name) { authUI("Enter your name"); return; }
+      const { data, error } = await c.auth.signUp({ email, password, options: { data: { name } } });
+      if (error) { authUI(error.message); return; }
+      if (!data.session) { authUI("Check your email to confirm the account, then sign in. (Tip: turn OFF 'Confirm email' in Supabase to skip this.)"); return; }
+    } else {
+      const { error } = await c.auth.signInWithPassword({ email, password });
+      if (error) { authUI(error.message); return; }
+    }
+    gate();
   };
-  SB.out = async () => { await c.auth.signOut(); location.reload(); };
+  SB.out = async () => { clearTimeout(waitT); await c.auth.signOut(); location.reload(); };
+  // after sign in: is this account approved by the admin?
+  async function gate() {
+    clearTimeout(waitT);
+    const { data: sess } = await c.auth.getSession(), user = sess.session && sess.session.user;
+    if (!user) { authUI(); return; }
+    const { data, error } = await c.rpc("request_access", { p_name: (user.user_metadata && user.user_metadata.name) || user.email, p_device: devName() });
+    if (error) { box(`<h3 class="wn">Cannot check access</h3><p>${esc(error.message)}</p><p><small>Did you run supabase/update-2.sql ?</small></p><button onclick="SB.boot()">Retry</button> <button onclick="SB.out()">Sign out</button>`); return; }
+    SB.staff = data;
+    if (data.status == "approved") { await start(); return; }
+    if (data.status == "removed") { box(`<h3 class="wn">Access removed</h3><p>The admin removed this device. Ask the admin to approve it again.</p><button onclick="SB.out()">Sign out</button>`); waitT = setTimeout(gate, 10000); return; }
+    box(`<h3>⏳ Waiting for admin approval</h3><p>Your request was sent:<br><b>${esc(data.name)}</b> · ${esc(data.email)}<br><small>${esc(data.device || "")}</small></p><p>Ask the shop admin to open <b>Settings → Staff &amp; devices</b> and approve you. This page continues automatically.</p><button onclick="SB.out()">Sign out</button>`);
+    waitT = setTimeout(gate, 6000);
+  }
+  // admin: staff & devices panel (Settings page)
+  SB.staffList = [];
+  async function loadStaff() {
+    if (!SB.staff || SB.staff.role != "A") return;
+    const { data } = await c.from("staff").select("*").order("created_at");
+    const n0 = SB.staffList.filter(x => x.status == "pending").length;
+    SB.staffList = data || [];
+    if (SB.staffList.filter(x => x.status == "pending").length > n0 && n0 >= 0 && SB.staffSeen) T("🔔 A new device is waiting for approval");
+    SB.staffSeen = true;
+  }
+  const stH = () => `<table><tr><th>Name</th><th>Device</th><th>Status</th><th>Role</th><th></th></tr>${SB.staffList.map(s => { const me = s.user_id == SB.staff.user_id; return `<tr><td>${esc(s.name)}<br><small>${esc(s.email)}</small></td><td><small>${esc(s.device || "")}</small></td><td class="${s.status == "approved" ? "" : "wn"}">${s.status}</td><td><select ${me ? "disabled" : ""} onchange="SB.st('${s.user_id}',{role:this.value})">${[["A", "Admin"], ["C", "Cashier"], ["K", "Stock Keeper"]].map(r => `<option value="${r[0]}"${s.role == r[0] ? " selected" : ""}>${r[1]}</option>`).join("")}</select></td><td>${me ? "(you)" : (s.status != "approved" ? `<button class="pri" onclick="SB.st('${s.user_id}',{status:'approved',approved_at:new Date().toISOString()})">✓ Approve</button>` : `<button onclick="SB.st('${s.user_id}',{status:'removed'})">Remove</button>`) + ` <button onclick="SB.del('${s.user_id}')" title="Delete">🗑</button>`}</td></tr>`; }).join("")}</table>`;
+  const stRefresh = async () => { await loadStaff(); const e = $("stp"); if (e) e.innerHTML = stH(); };
+  SB.st = async (uid, patch) => { const { error } = await c.from("staff").update(patch).eq("user_id", uid); if (error) T(error.message); stRefresh(); };
+  SB.del = async uid => { const { error } = await c.from("staff").delete().eq("user_id", uid); if (error) T(error.message); stRefresh(); };
+  V.set = (set0 => function () { stRefresh(); return set0() + `<div class="cd"><b>👥 Staff &amp; devices</b><br><small style="color:var(--mu)">New devices appear here as <b>pending</b>. Approve them, choose their role, or remove them. Only Admins can see this.</small><div id="stp" style="overflow-x:auto;margin-top:8px">${stH()}</div></div>`; })(V.set);
+  async function chk() {       // signed-in device: still approved? role changed?
+    const { data } = await c.rpc("my_staff");
+    if (!data || data.status != "approved" || data.role != SB.staff.role) location.reload();
+  }
+
   async function start() {
     box("Loading…");
     try { await pull(); }
-    catch (e) { box(`<h3 class="wn">Cannot load data</h3><p>${esc(e.message || e)}</p><p><small>Did you run supabase/schema.sql ?</small></p><button onclick="SB.boot()">Retry</button> <button onclick="SB.out()">Sign out</button>`); return; }
-    SB.ready = true; try { const [n, p] = (localStorage.getItem("posuser") || "").split("\u0001"); const u = S.users.find(x => x.n == n && String(x.pin) == p); if (u) U = u; } catch (e) {} LU(); R(); subscribe();
-    if (!cache.settings) SB.push();
+    catch (e) { box(`<h3 class="wn">Cannot load data</h3><p>${esc(e.message || e)}</p><p><small>Did you run supabase/schema.sql, update-1.sql and update-2.sql ?</small></p><button onclick="SB.boot()">Retry</button> <button onclick="SB.out()">Sign out</button>`); return; }
+    SB.ready = true; U = { n: SB.staff.name || SB.staff.email, r: SB.staff.role, pin: "" }; LU(); R(); subscribe(); stRefresh();
+    if (!cache.settings && SB.staff.role == "A") SB.push();
   }
 
   // ---- customer side (QR menu) -----------------------------------------------------
@@ -227,8 +274,6 @@ ${mpay != "shop" ? `<input placeholder="Delivery address" value="${esc(mad)}" on
     T("✅ Order sent! Total " + m(data.total));
     await loadOrders(false); R();
   };
-  const LI0 = window.LI;
-  window.LI = function () { LI0(); if (U) try { localStorage.setItem("posuser", U.n + "\u0001" + U.pin); } catch (e) {} };
 
   SB.boot = async () => {
     try { Object.assign(S, JSON.parse(localStorage.getItem("pospref") || "{}")); } catch (e) {}
@@ -236,7 +281,7 @@ ${mpay != "shop" ? `<input placeholder="Delivery address" value="${esc(mad)}" on
     if (location.hash == "#menu") { try { await menuLoad(); } catch (e) { box("Menu is not available right now."); } return; }
     const { data } = await c.auth.getSession();
     if (!data.session) { authUI(); return; }
-    await start();
+    await gate();
   };
   SB.boot();
 })();
