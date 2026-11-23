@@ -71,7 +71,9 @@ Server එකක් ඕන නැහැ. Hosting = **Cloudflare Pages** (free), 
 3. **Run** ඔබන්න. "Success. No rows returned" කියලා ආවොත් හරි.
 4. **ඊට පස්සේ තවත් එක්:** ආයෙත් **New query** → `supabase/update-1.sql` ඔක්කොම copy කරලා paste කරලා **Run**. (මේකෙන් QR order workflow, payment choices, හැම device එකම ඉබේම refresh වෙන realtime එක ක්‍රියාත්මක වෙනවා.)
 5. **තවත් එක්:** ආයෙත් **New query** → `supabase/update-2.sql` ඔක්කොම paste කරලා **Run**. (මේකෙන් **staff / device approval** සහ **database ආරක්ෂාව** ක්‍රියාත්මක වෙනවා.)
-   > අනුපිළිවෙල: **schema.sql → update-1.sql → update-2.sql**. කලින් ඒවා run කරලා තියෙනවා නම් අලුත් එක / ඒවා විතරක් run කරන්න.
+   6. **තවත් එක්:** ආයෙත් **New query** → `supabase/update-3.sql` ඔක්කොම paste කරලා **Run**. (මේකෙන් **device එකකට එකක් approval**, **table-by-table role rules**, **username login** ක්‍රියාත්මක වෙනවා.)
+
+> අනුපිළිවෙල: **schema.sql → update-1.sql → update-2.sql → update-3.sql**. කලින් ඒවා run කරලා තියෙනවා නම් අලුත් එක / ඒවා විතරක් run කරන්න.
 
 මේකෙන් හැදෙන tables:
 
@@ -98,9 +100,9 @@ Staff ලා ගේ accounts **app එකෙන්ම** හැදෙන නි�
 
 ## පියවර 4 — 🔐 ආරක්ෂාව (මෙහෙමයි වැඩ කරන්නේ)
 
-- Sign-ups ON වුණාට, **අලුත් account එකකට කිසිම දත්තයක් පෙනෙන්නේ නැහැ** — Admin approve කරනකල් (`update-2.sql` එකේ database rules නිසා).
+- Sign-ups ON වුණාට, **අලුත් account එකකට / අලුත් device එකකට කිසිම දත්තයක් පෙනෙන්නේ නැහැ** — Admin approve කරනකල් (`update-3.sql` එකේ database rules නිසා). **එකම email + password එක වෙන device එකකින් දැම්මත් ඒ device එකට අලුතින් approve කරන්න ඕන.**
 - **පළමුවෙන්ම request කරන කෙනා Admin** වෙනවා. ඒ නිසා **site එක deploy කරපු ගමන්ම, වෙන කිසිවෙක් දැනගන්න කලින්, ඔයා ඉස්සෙල්ලා account එක හදාගන්න** (පියවර 9).
-- ඊට පස්සේ එන හැම device එකක්ම / කෙනෙක්ම **pending**. ඔයා (Admin) **Settings → 👥 Staff & devices** වලින් **Approve**, **Role** (Admin / Cashier / Stock Keeper) තෝරන්න, **Remove**, **🗑 Delete** කරන්න පුළුවන්.
+- ඊට පස්සේ එන හැම device එකක්ම / කෙනෙක්ම **pending**. ඔයා (Admin) **Settings → 👥 Staff & devices** වලින් හැම device එකකටම **Job role** (Admin / Cashier / Stock Keeper), **ඒ device එකට open කරන්න පුළුවන් pages** (tick boxes) තෝරලා **Approve** කරන්න, පස්සේ **edit**, **Remove**, **🗑 Delete** කරන්න පුළුවන්.
 - Remove කළාම ඒ device එක තත්පර 20ක් ඇතුළත ඉබේම ඇතුළට යන්න බැරි වෙනවා.
 
 ## පියවර 5 — Keys `config.js` එකට දාන්න
@@ -145,7 +147,7 @@ window.APP_CONFIG = {
 
 **Admin (ඔයා) — පළමුවෙන්ම:**
 1. Site එක open කරන්න → **"New device? Request access"** ඔබන්න.
-2. ඔයාගේ **නම, email, password (අකුරු 6+)** දාලා **Request access**. ඔයා තමයි පළමු කෙනා නිසා **ඉබේම Admin + approved**, ඇතුළට යනවා.
+2. ඔයාගේ **නම, username (ඕන නම්), email, password (අකුරු 6+)** දාලා **Create account & request access**. ඔයා තමයි පළමු කෙනා නිසා **ඉබේම Admin + approved**, ඇතුළට යනවා.
 3. **Settings** → shop නම, logo, tax දාන්න. **Inventory** එකට categories / brands / items දාන්න.
 
 **අනිත් අය (cashier, stock keeper):**
@@ -154,7 +156,7 @@ window.APP_CONFIG = {
 3. ඔයා (Admin) **Settings → Staff & devices** එකේ ඒ අයව **Approve** කරලා **role** එක තෝරන්න (🔔 පණිවිඩයකුත් එනවා).
 4. ඒ device එක ඉබේම ඇතුළට යනවා.
 
-පසුව: **Sign in** (email + password). Refresh කළත් sign in එක මතකයි, **⎋ Sign out** ඔබනකල් ඉන්නවා.
+පසුව: **Sign in** (**email හෝ username** + password). Refresh කළත් sign in එක මතකයි, **⎋ Sign out** ඔබනකල් ඉන්නවා.
 
 ## පියවර 10 — QR ordering
 
@@ -196,7 +198,7 @@ GitHub එකේ file එක edit කරලා **Commit** කළාම Cloudflar
 
 - **Bill එකේ discount / qty / price** — ඇතුළත් කරන ගමන්ම ගණන් වෙනස් වෙනවා (වෙන තැනක් click කරන්න ඕන නැහැ).
 - **Refresh කළත් sign in එක මතකයි** — **⎋ Sign out** ඔබනකල් ඉන්නවා.
-- **වෙනත් device වල වෙනස්කම් ඉබේම පෙනෙනවා** — bills, orders, stock, QR orders ආදිය සමාන්තරව refresh වෙනවා (realtime + තත්පර 30කට වතාවක් check කිරීම). ඔයා type කරමින් ඉන්න වෙලාවේ page එක refresh කරන්නේ නැහැ.
+- **වෙනත් device වල වෙනස්කම් ඉබේම පෙනෙනවා** — bills, orders, stock, QR orders ආදිය සමාන්තරව refresh වෙනවා (QR orders තත්පර 10කට වතාවක්, අනිත් දත්ත තත්පර 30කට වතාවක් check කිරීම). ඔයා type කරමින් ඉන්න වෙලාවේ page එක refresh කරන්නේ නැහැ.
 - **QR orders workflow:** `New → Confirm / Reject → Preparing → Order ready → Complete order`.
   - **Confirm** කළාම ඒ order එකෙන් **bill එකක් හැදිලා Orders tab එකේ save වෙනවා**, stock අඩු වෙනවා, bill එක print / WhatsApp කරන්න පුළුවන්.
   - **Complete** / **Rejected** orders පැය 24ක් වෙනම කොටසක පෙනෙනවා, ඊට පස්සේ ලැයිස්තුවෙන් ඉබේම අයින් වෙනවා.
@@ -214,3 +216,26 @@ GitHub එකේ file එක edit කරලා **Commit** කළාම Cloudflar
 - **Admin approve කරනකල්** අලුත් device එකකට කිසිම දත්තයක් පෙනෙන්නේ නැහැ (database එකෙන්ම පාලනය).
 - Admin: **Settings → Staff & devices** → Approve / Role / Remove / Delete. Settings page එක Admin ට විතරයි.
 - PIN login අයින් කළා. දැන් අලුත් device එකකින් email + password, ඊට පස්සේ Admin approve.
+
+
+---
+
+## 🆕 Update 3 — Device approval + table-by-table roles + username login
+
+- **Device එකකට එකක් approval:** එකම account එක (email + password) වෙන browser / phone එකකින් දැම්මත් **ඒ device එක "pending"**. Admin (approved Admin device එකකින්) **Settings → Staff & devices** එකේ ඒක **Approve** කරන්න ඕන. එතනදීම **Job role** සහ **ඒ device එකට open කරන්න පුළුවන් pages** තෝරන්න, පස්සේ ඕන වෙලාවක edit / remove කරන්න.
+- **Role rules database එකෙන්ම (table by table):**
+
+| Table | Admin | Cashier | Stock keeper |
+|---|---|---|---|
+| sales (bills), refunds, credit notes, customers, QR orders | ✅ | ✅ | ⛔ |
+| items | ✅ | කියවීම පමණයි (Refund කරද්දී "Sale items" හැදීම විතරයි) | ✅ |
+| variants (size/colour/stock) | ✅ | ✅ (විකුණද්දී stock අඩුවෙන නිසා) | ✅ |
+| settings (shop, categories, brands) | ✅ | කියවීම පමණයි | ✅ |
+| offers, offer notes, QR registrations | ✅ | කියවීම පමණයි | ⛔ |
+| barcode labels queue | ✅ | ✅ | ✅ |
+| devices (Staff & devices) | ✅ | ⛔ | ⛔ |
+
+- **Username + password:** Account හදද්දී username එකක් දෙන්න පුළුවන්. Sign in වෙද්දී **email හෝ username** දෙකෙන් එකක් + password. (Supabase එකට email එකක් අනිවාර්යයි, ඒක account එක හදද්දී විතරක් ඕන. username එක දැක්කාම email එක හොයාගන්නේ database function එකකින්, ඒ නිසා අනුන්ට username දන්නවා නම් ඒකට අදාල email එක දැනගන්න පුළුවන් — කුඩා කඩයකට ප්‍රශ්නයක් නෙවෙයි, ඒත් දැනගෙන ඉන්න.)
+- **පළමුවෙන්ම Update 2 පාවිච්චි කළ Admin account එක:** update-3 පස්සේ ඒ account එකේ **පළමු device එක** ඉබේම Admin + approved වෙනවා. ඊට පස්සේ එන ඕනම device එකක් pending.
+
+> **සැලකිය යුතුයි:** Realtime (WebSocket) database එකට device id එක යවන්න බැරි නිසා ඒක අයින් කරලා, QR orders තත්පර 10කට වතාවක් check කරනවා. ඒ කියන්නේ ඇණවුම පෙනෙන්න තත්පර 10ක් විතර යන්න පුළුවන්.
