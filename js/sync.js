@@ -21,7 +21,7 @@
 
   // small status badge (bottom-left)
   const badge = document.createElement("div");
-  badge.style.cssText = "position:fixed;left:8px;bottom:8px;font-size:11px;color:var(--mu);z-index:5;max-width:60vw";
+  badge.style.cssText = "position:fixed;left:8px;bottom:calc(8px + var(--nb,0px));font-size:11px;color:var(--mu);z-index:5;max-width:60vw";
   document.addEventListener("DOMContentLoaded", () => document.body.appendChild(badge));
   if (document.body) document.body.appendChild(badge);
   const st = x => { badge.textContent = x; };
@@ -215,90 +215,10 @@ ${s.role == "A" ? `<small style="color:var(--mu)">Admin can open every page.</sm
     if (!cache.settings && SB.staff.role == "A") SB.push();
   }
 
-  // ---- customer side (QR menu) -----------------------------------------------------
-  async function loadOffers() {
-    let p = ""; try { p = localStorage.getItem("regp") || ""; } catch (e) {}
-    if (!p) { moff = []; return; }
-    const { data } = await c.rpc("my_offers", { p_phone: p });
-    moff = data || [];
-  }
-  async function menuLoad() {
-    const [a, b] = await Promise.all([all("public_menu"), c.from("public_shop").select("*").maybeSingle()]);
-    const M = {};
-    a.forEach(r => { const it = M[r.item_id] = M[r.item_id] || { id: r.item_id, no: r.no, name: r.name, price: +r.price, cost: 0, cat: r.cat || "", br: r.brand || "", img: r.img || "", ci: r.ci || {}, v: [] }; it.v.push({ sku: r.sku, size: r.size, color: r.color, bar: "", qty: r.qty }); });
-    S.items = Object.values(M).sort((x, y) => x.no - y.no);
-    const s = b.data || {};
-    S.shop = { ...S.shop, name: s.name || "Shop", logo: s.logo || "", offer: s.offer || "", cur: s.cur || "Rs." };
-    await loadOffers(); await loadOrders(false); R();
-    setInterval(async () => { try { await loadOrders(true); const a = document.activeElement; if (!(a && /INPUT/.test(a.tagName))) R(); } catch (e) {} }, 15000);
-  }
-  window.mreg = function () {
-    let p = ""; try { p = localStorage.getItem("regp") || ""; } catch (e) {}
-    if (!p) return `<div class="cd" style="background:var(--bg)"><b>Register to get offers</b><div class="fm"><input id="rn" placeholder="Name"><input id="rp" placeholder="Phone"><button class="pri" onclick="RG()">Register</button></div></div>`;
-    return moff.map(o => `<div class="cd" style="border-color:var(--ac)">${o.img ? `<img src="${o.img}" alt="" style="width:100%;border-radius:10px;margin-bottom:8px">` : ""}<b>🎁 ${esc(o.title)}</b><p>${esc(o.msg)}</p>${(o.items || []).map(i => `<div class="row"><span>${esc(i.name)} <small>${esc(i.cat || "Other")}</small></span><span><s>${m(i.price)}</s> <b>${m(i.offer)}</b></span></div>`).join("")}</div>`).join("");
-  };
-  // ---- customer app: order, pay choice, status + notifications ---------------------
-  let mcat = "", mq = "", mpay = "cod", mqty = {}, mnm = "", mph = "", mad = "", orders = [], ost = {};
-  try { ost = JSON.parse(localStorage.getItem("ost") || "{}"); } catch (e) {}
-  const STX = { pending: "⏳ Waiting for confirmation", confirmed: "👨‍🍳 Confirmed · preparing", ready: "🛍 Ready!", completed: "✔ Completed", rejected: "❌ Rejected" };
-  const phone0 = () => { try { return localStorage.getItem("regp") || localStorage.getItem("ordph") || ""; } catch (e) { return ""; } };
-  async function loadOrders(notify) {
-    const p = phone0(); if (!p) return;
-    const { data } = await c.rpc("my_orders", { p_phone: p });
-    orders = data || [];
-    orders.forEach(o => {
-      if (notify && ost[o.id] && ost[o.id] !== o.status) {
-        const msg = { confirmed: "✅ Order #" + o.id + " confirmed — we are preparing it", ready: "🛍 Order #" + o.id + " is READY!", rejected: "❌ Order #" + o.id + " was rejected", completed: "✔ Order #" + o.id + " completed" }[o.status];
-        if (msg) { T(msg); try { if (Notification.permission === "granted") new Notification(S.shop.name, { body: msg }); } catch (e) {} }
-      }
-      ost[o.id] = o.status;
-    });
-    try { localStorage.setItem("ost", JSON.stringify(ost)); } catch (e) {}
-  }
-  window.RG = async function () {
-    const p = np($("rp").value); if (!p) { T("Phone required"); return; }
-    const { error } = await c.rpc("register_customer", { p_name: $("rn").value.trim(), p_phone: p });
-    if (error) { T("Could not register"); return; }
-    try { localStorage.setItem("regp", p); } catch (e) {}
-    mph = p; mnm = $("rn").value.trim();
-    await loadOffers(); await loadOrders(false); R();
-  };
-  const mrows = () => {
-    const k = mq.toLowerCase();
-    return VS().filter(x => (!mcat || (x.it.cat || "Other") == mcat) && (!k || (x.it.name + " " + vl(x.v) + " #" + x.it.no).toLowerCase().includes(k))).map(x => {
-      const im = (x.it.ci && x.it.ci[x.v.color]) || x.it.img, off = x.v.qty < 1;
-      return `<div class="row" style="${off ? "opacity:.55" : ""}"><span>${im ? `<img src="${im}" alt="" style="height:44px;width:44px;object-fit:cover;border-radius:8px;vertical-align:middle;margin-right:8px">` : ""}${esc(x.it.name)} <small>${esc(vl(x.v))}</small><br><small style="color:var(--mu)">${esc(x.it.cat || "")} · ${m(x.it.price)} · ${off ? "Out of stock" : x.v.qty + " in stock"}</small></span><input class="mq" type="text" inputmode="numeric" value="${mqty[x.v.sku] || 0}" style="width:60px" ${off ? "disabled" : ""} oninput="MQ('${x.v.sku}',this.value)"></div>`;
-    }).join("") || "<p>—</p>";
-  };
-  window.MQ = (k, v) => { const f = FV(k); mqty[k] = Math.min(Math.max(0, parseInt(v) || 0), f ? f.v.qty : 0); };
-  window.MS = v => { mq = v; $("ml").innerHTML = mrows(); };
-  window.menu = function () {
-    const sh = S.shop, cats = [...new Set(S.items.map(i => i.cat || "Other"))], PM = { cod: "💵 Cash on delivery", bank: "🏦 Bank transfer · delivery", shop: "🏬 I will visit the shop" };
-    return `<main><div class="cd"><div style="text-align:center">${sh.logo ? `<img src="${sh.logo}" alt="" style="max-height:90px;border-radius:10px"><br>` : ""}<h2>${esc(sh.name)}</h2></div>${sh.offer ? `<p><b>${esc(sh.offer)}</b></p>` : ""}${mreg()}
-${orders.length ? `<div class="cd"><b>My orders</b>${orders.slice(0, 8).map(o => `<div class="row"><span>#${o.id} · ${new Date(o.t).toLocaleDateString()} · ${m(o.total)}</span><b>${STX[o.status] || o.status}</b></div>`).join("")}${(window.Notification && Notification.permission === "default") ? `<button onclick="Notification.requestPermission().then(R)">🔔 Turn on notifications</button>` : ""}</div>` : ""}
-<input placeholder="🔍 Search items" value="${esc(mq)}" oninput="MS(this.value)"><div class="pills">${["", ...cats].map(c => `<button class="ch ${mcat == c ? "on" : ""}" onclick="mcat=${J(c)};R()">${c ? esc(c) : "All"}</button>`).join("")}</div>
-<div id="ml">${mrows()}</div>
-<div class="fm"><input placeholder="Name" value="${esc(mnm)}" oninput="mnm=this.value"><input placeholder="Phone" value="${esc(mph)}" oninput="mph=this.value"></div>
-<div class="pills">${Object.keys(PM).map(k => `<button class="ch ${mpay == k ? "on" : ""}" onclick="mpay='${k}';R()">${PM[k]}</button>`).join("")}</div>
-${mpay != "shop" ? `<input placeholder="Delivery address" value="${esc(mad)}" oninput="mad=this.value"><br><br>` : ""}<button class="pri" onclick="MO()">Place order</button></div></main>`;
-  };
-  window.MO = async function () {
-    const lines = Object.entries(mqty).filter(([k, q]) => q > 0 && FV(k)).map(([k, q]) => { const f = FV(k); return { sku: k, n: f.it.name + " " + vl(f.v), qty: Math.min(q, f.v.qty) }; });
-    if (!lines.length) { T("Choose at least one item"); return; }
-    const ph = np(mph); if (!ph) { T("Phone required"); return; }
-    if (mpay != "shop" && !mad.trim()) { T("Delivery address required"); return; }
-    try { if (window.Notification && Notification.permission === "default") Notification.requestPermission(); } catch (e) {}
-    const { data, error } = await c.rpc("place_order", { p_name: mnm.trim(), p_phone: ph, p_lines: lines, p_pay: mpay, p_addr: mad.trim() });
-    if (error) { T("Could not send the order: " + (error.message || "")); return; }
-    mqty = {}; try { localStorage.setItem("ordph", ph); } catch (e) {}
-    T("✅ Order sent! Total " + m(data.total));
-    await loadOrders(false); R();
-  };
-
   SB.boot = async () => {
     try { Object.assign(S, JSON.parse(localStorage.getItem("pospref") || "{}")); } catch (e) {}
     if (!c) { box(`<h3>⚙️ Setup needed</h3><p>Open <b>config.js</b> and paste your Supabase <b>URL</b> and <b>anon key</b>.</p>`); return; }
-    if (location.hash == "#menu") { try { await menuLoad(); } catch (e) { box("Menu is not available right now."); } return; }
+    if (location.hash == "#menu") { location.replace(new URL("menu.html", location.href).href); return; }
     const { data } = await c.auth.getSession();
     if (!data.session) { authUI(); return; }
     await gate();

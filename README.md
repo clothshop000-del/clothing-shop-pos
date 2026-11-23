@@ -4,10 +4,16 @@
 
 ```
 clothing-shop-pos/
-├─ index.html            ← POS page එක
-├─ css/style.css         ← පෙනුම (design)
+├─ index.html            ← POS (staff) page එක
+├─ menu.html             ← 📱 Customer app (QR menu) — customers ට
+├─ manifest.webmanifest  ← customer app එක phone එකට install කරන්න (PWA)
+├─ sw.js                 ← install / offline / notifications සඳහා service worker
+├─ icons/                ← app icons
+├─ css/style.css         ← POS පෙනුම (phone / tablet / desktop)
+├─ css/customer.css      ← Customer app පෙනුම
 ├─ js/app.js             ← POS app එකේ මුළු කේතය (billing, orders, refunds, customers,
 │                          inventory, barcode labels, QR ordering, dashboard, settings)
+├─ js/customer.js        ← Customer app එකේ code එක
 ├─ js/sync.js            ← Supabase එක්ක සම්බන්ධය (login, දත්ත load/save, live QR orders, QR menu)
 ├─ config.js             ← ඔයාගේ Supabase URL + anon key මෙතන දාන්න
 ├─ supabase/schema.sql   ← Database එක හදන SQL (tables, security, QR functions, realtime)
@@ -54,8 +60,8 @@ Server එකක් ඕන නැහැ. Hosting = **Cloudflare Pages** (free), 
 2. `index.html` එක right-click → **Open with Live Server**.
 3. Browser එකේ `http://127.0.0.1:5500` open වෙනවා.
 
-**QR menu එක local එකේ බලන්න:** `http://localhost:3000/#menu`.
-(Phone එකෙන් බලන්න ඕන නම් computer සහ phone එකම Wi-Fi එකේ තියලා `http://<computer ගේ IP>:3000/#menu` වලින්. ඒත් QR code එක හදද්දී ඒ link එකම ඇතුළත් වෙන නිසා, QR එක print කරන්නේ **Cloudflare link එකෙන් open කරලා** ඉන්න වෙලාවේ.)
+**Customer app එක local එකේ බලන්න:** `http://localhost:3000/menu.html`.
+(Phone එකෙන් බලන්න ඕන නම් computer සහ phone එකම Wi-Fi එකේ තියලා `http://<computer ගේ IP>:3000/menu.html` වලින්. ඒත් QR code එකට ඇතුළත් වෙන්නේ site එක open කරලා ඉන්න link එකේ `menu.html` ලිපිනය නිසා, QR එක print කරන්නේ **Cloudflare link එකෙන් open කරලා** ඉන්න වෙලාවේ.)
 
 ---
 
@@ -73,7 +79,9 @@ Server එකක් ඕන නැහැ. Hosting = **Cloudflare Pages** (free), 
 5. **තවත් එක්:** ආයෙත් **New query** → `supabase/update-2.sql` ඔක්කොම paste කරලා **Run**. (මේකෙන් **staff / device approval** සහ **database ආරක්ෂාව** ක්‍රියාත්මක වෙනවා.)
    6. **තවත් එක්:** ආයෙත් **New query** → `supabase/update-3.sql` ඔක්කොම paste කරලා **Run**. (මේකෙන් **device එකකට එකක් approval**, **table-by-table role rules**, **username login** ක්‍රියාත්මක වෙනවා.)
 
-> අනුපිළිවෙල: **schema.sql → update-1.sql → update-2.sql → update-3.sql**. කලින් ඒවා run කරලා තියෙනවා නම් අලුත් එක / ඒවා විතරක් run කරන්න.
+7. **තවත් එක්:** `supabase/update-4.sql` run කරන්න. (Customer app එකේ **offers slider** සහ **purchase history** සඳහා.)
+
+> අනුපිළිවෙල: **schema.sql → update-1 → update-2 → update-3 → update-4**. කලින් ඒවා run කරලා තියෙනවා නම් අලුත් එක / ඒවා විතරක් run කරන්න.
 
 මේකෙන් හැදෙන tables:
 
@@ -161,7 +169,7 @@ window.APP_CONFIG = {
 ## පියවර 10 — QR ordering
 
 1. **QR Ordering** tab → **QR** බොත්තම → **⬇ Download QR** → print කරලා කඩේට ගහන්න.
-2. Customer ගේ phone එකේ QR scan → `https://....pages.dev/#menu` menu එක → register / order කරන්න පුළුවන්.
+2. Customer ගේ phone එකේ QR scan → `https://....pages.dev/menu.html` (Customer app) → ඇණවුම් කරන්න, register වෙන්න, app එක install කරන්න පුළුවන්.
 3. Order එක ඔයාගේ **QR Ordering** page එකට **ඒ ගමන්ම** එනවා (🔔 පණිවිඩයක් සමඟ).
 4. Offers: Customers tab → Offers → WhatsApp / QR customers ට යවන්න. Customer register වුණාම ඒ phone number එකට අදාල offer image + items QR menu එකේ පෙනෙනවා.
 
@@ -239,3 +247,28 @@ GitHub එකේ file එක edit කරලා **Commit** කළාම Cloudflar
 - **පළමුවෙන්ම Update 2 පාවිච්චි කළ Admin account එක:** update-3 පස්සේ ඒ account එකේ **පළමු device එක** ඉබේම Admin + approved වෙනවා. ඊට පස්සේ එන ඕනම device එකක් pending.
 
 > **සැලකිය යුතුයි:** Realtime (WebSocket) database එකට device id එක යවන්න බැරි නිසා ඒක අයින් කරලා, QR orders තත්පර 10කට වතාවක් check කරනවා. ඒ කියන්නේ ඇණවුම පෙනෙන්න තත්පර 10ක් විතර යන්න පුළුවන්.
+
+
+---
+
+## 🆕 Update 4 — Customer app (menu.html) + responsive
+
+**Customer app** (`menu.html`) — QR එකෙන් open වෙන වෙනම app එකක්. Phone, tablet, desktop හැමදේකම හරියට පෙනෙනවා.
+
+- **Offers slider** — උඩින් offers ස්වයංක්‍රීයව ලිස්සනවා (තත්පර 4½ ට වතාවක්). Click කළාම ඒ offer එකේ items විතරක් පෙනෙනවා, offer මිල (සැබෑ මිල කැඩුණු ඉරකින්) එක්ක.
+- **Items category වලින්** — Category pills + **search**. Item එකක් click කළාම: **Size → Colour** තෝරන්න (හැම colour එකකම photo + stock ගණන), ගණන තෝරලා **Add to cart**. **Stock නැති item / size / colour තෝරන්න බැහැ** (අඳුරුවෙලා), stock අලුත් වුණාම ඉබේම නැවත සක්‍රිය වෙනවා (තත්පර 15කට වතාවක් refresh).
+- **Cart → Order:** Cash on delivery / Bank transfer · delivery / Shop visit, delivery address. මිල server එකෙන් ගණන් වෙනවා.
+- **Profile (👤):** Register (නම + phone), **මගේ ඇණවුම්** (status progress bar එකක් එක්ක), **මිලදී ගත් ඉතිහාසය** (shop එකේ bills ඇතුළුව, phone number එකෙන් ගැළපෙන), notifications on කරන්න, **Share link**, **Log out**.
+- **Notifications:** ඇණවුම Confirmed / **Ready** / Completed / Rejected වුණාම ඒ ගමන් දැනුම්දීමක්. (Phone එකේ app එක open ඉන්න / background එකේ තියෙන අතරතුර.)
+- **Dark mode** සහ **භාෂා තුන** (English / සිංහල / தமிழ்) — customer ට තමන්ටම මාරු කරන්න පුළුවන්, මතක තියාගන්නවා.
+- **Install (PWA):** Android Chrome වල "📲 Install" බොත්තම ඉබේම පෙනෙනවා (browser එක ඉඩ දුන්නොත්). iPhone වල "Share → Add to Home Screen" උපදෙස පෙනෙනවා. Install වුණාම app එකක් වගේ full screen.
+
+**POS (staff) — phone / tablet / desktop:**
+- **Desktop / laptop:** වම් sidebar, POS එකේ items + බිල පැත්තකින් පැත්තකට.
+- **Tablet:** items සහ බිල ඉඩ අනුව එකම පේළියේ / යටින්.
+- **Phone:** tabs **යටින් තියෙන bar** එකක් (අතින් ඇඟිල්ලෙන් ලේසියෙන් ඇදගන්න), POS එකේ **යටින් "🧾 බිල ↓" bar එකක්** (items ගණන + මුදල, ඔබපුවාම බිලට යනවා), input අකුරු ලොකු (zoom වෙන්නේ නැහැ), බොත්තම් ඇඟිල්ලට ගැළපෙන ලොකුකම, වගු දකුණට ඇදලා බලන්න පුළුවන්.
+
+> **සැලකිය යුතුයි:**
+> - Customer app එකේ **photos database එකේම** තියෙනවා (resize කරලා). Items 100කට වඩා photos එක්ක තියෙනවා නම් මුල් load එක ටිකක් සෙමින් වෙන්න පුළුවන්. ඒ වෙලාවට Supabase **Storage** එකට මාරු කරන්න වෙනවා.
+> - **Background push** (app එක සම්පූර්ණයෙන් වසලා තිබුණත් එන notification) සඳහා server එකක් (Supabase Edge Function + Web Push keys) ඕන. දැන් notifications එන්නේ app එක open / background එකේ තියෙන අතරතුර.
+> - Install වෙන app එකේ **නම "Clothing Shop"** (manifest එකේ). ඔයාගේ shop නම ඒකට දාන්න `manifest.webmanifest` එකේ `name` සහ `short_name` වෙනස් කරන්න. Icon එකත් `icons/` එකේ ඔයාගේ logo එකෙන් මාරු කරන්න පුළුවන් (192 සහ 512 PNG).
